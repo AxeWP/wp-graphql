@@ -3,7 +3,12 @@
 namespace WPGraphQL\Model;
 
 use Exception;
+use GraphQL\Type\Definition\ResolveInfo;
+use GraphQLRelay\Relay;
 use WP_User;
+use WPGraphQL\AppContext;
+use WPGraphQL\Data\Loader\AbstractDataLoader;
+use WPGraphQL\Data\Connection\AbstractConnectionResolver;
 
 /**
  * Class Model - Abstract class for modeling data for all core types
@@ -560,8 +565,117 @@ abstract class Model {
 	}
 
 	/**
-	 * @return mixed
+	 * Initializes the object.
+	 *
+	 * @return void
 	 */
 	abstract protected function init();
+
+	/**
+	 * Get the name of the dataloader to use for this model.
+	 * This is also used as the 'type' when encoding the Global ID.
+	 * 
+	 * This should be overridden in the Model subclass.
+	 *
+	 * @todo make abstract.
+	 *
+	 * @return string|false The loader name, or false if the subclass doesn't override this method.
+	 */
+	public static function get_loader_name() {
+		graphql_debug(
+			sprintf(
+				// translators: The Model class name.
+				__( 'Model::get_loader_name() must be overridden in the %s subclass.', 'wp-graphql' ),
+				static::class
+			)
+		);
+
+		return false;
+	}
+
+	/**
+	 * Get an instance of the connection resolver for this model.
+	 * 
+	 * This should be overridden in the Model subclass.
+	 *
+	 * @param mixed $source  The source that's passed down the GraphQL queries.
+	 * @param array $args    The query args.
+	 * @param AppContext $context  The AppContext passed down the GraphQL tree.
+	 * @param ResolveInfo $info  The ResolveInfo passed down the GraphQL tree.
+	 * 
+	 * @return AbstractConnectionResolver|false The connection resolver instance, or false if the subclass doesn't override this method.
+	 */
+	public static function get_connection_resolver( $source, array $args, AppContext $context, ResolveInfo $info ) {
+		graphql_debug(
+			sprintf(
+				// translators: The Model class name.
+				__( 'Model::get_connection_resolver() must be overriden in the %s subclass', 'wp-graphql' ),
+				static::class
+			)
+		);
+
+		return false;
+	}
+
+	/**
+	 * Gets the unique global ID for the provided object ID.
+	 *
+	 * This is useful when you need the global ID but don't necessarily know the type used by the dataloader.
+	 *
+	 * Models which use additional data to generate the global ID should override this method.
+	 *
+	 * @param int|string $id The object ID.
+	 *
+	 * @uses Relay::toGlobalId()
+	 * 
+	 * @return string|false The global ID, or false if the subclass doesn't use a dataloader
+	 */
+	public static function to_global_id( $id ) {
+		$loader_name = static::get_loader_name();
+		
+		/**
+		 * Return false if the loader name is not set.
+		 *
+		 * @todo remove when get_loader_name() is made abstract.
+		 */
+		if ( empty( $loader_name ) ) {
+			return false;
+		}
+
+		return Relay::toGlobalId( $loader_name, (string) $id );
+	}
+
+	/**
+	 * Takes the global ID and return an array of the type, ID, and possibly other values used to encode it.
+	 *
+	 * @uses Relay::fromGlobalId().
+	 *
+	 * @param string $id The global ID.
+	 */
+	public static function from_global_id( string $id ) : array {
+		return Relay::fromGlobalId( $id );
+	}
+
+	/**
+	 * Get the DataLoader instance for the model.
+	 *
+	 * @param AppContext $context The AppContext instance.
+	 *
+	 * @return AbstractDataLoader|false The DataLoader instance, or false if the subclass doesn't use a dataloader.
+	 */
+	public static function get_loader( AppContext $context ) {
+		$loader_name = static::get_loader_name();
+
+		/**
+		 * Return false if the loader name is not set.
+		 *
+		 * @todo remove when get_loader_name() is made abstract.
+		 */
+		if ( empty( $loader_name ) ) {
+			return false;
+		}
+
+		return $context->get_loader( $loader_name );
+	}
 
 }
